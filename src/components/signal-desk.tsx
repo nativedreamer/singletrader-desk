@@ -119,8 +119,8 @@ export function SignalDesk() {
         data: { pairs, timeframe, strategy, hybrid, twelveDataKey },
       });
       setReport(next);
-      const firstLive = next.results.find((r) => !r.error && r.entryState === "live");
-      const firstOk = firstLive ?? next.results.find((r) => !r.error) ?? next.results[0];
+      const firstTrade = next.results.find((r) => !r.error && r.action !== "HOLD");
+      const firstOk = firstTrade ?? next.results.find((r) => !r.error) ?? next.results[0];
       if (firstOk) setFocusId(firstOk.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "The desk could not reach the feeds.");
@@ -135,8 +135,8 @@ export function SignalDesk() {
         <p className="text-sm font-medium text-muted">Signals</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">SingleTrader</h1>
         <p className="mt-3 text-sm leading-6 text-muted">
-          A buy or sell is shown only while the market is still at the entry. If price has already
-          traded through it, the level is marked passed and is not a fill.
+          Open crosses stay on the desk with entry, stop, and targets, even after price has
+          traded through.
         </p>
       </header>
 
@@ -156,16 +156,9 @@ export function SignalDesk() {
           {report && (
             <div className="space-y-4">
               <ResultGroup
-                title="Live entries"
-                empty="No live entries. Price has already left every open cross."
-                rows={buckets.live}
-                focusId={focus?.id}
-                onFocus={setFocusId}
-              />
-              <ResultGroup
-                title="Passed"
-                empty=""
-                rows={buckets.passed}
+                title="Entries"
+                empty="No open cross on the selected pairs."
+                rows={[...buckets.live, ...buckets.passed]}
                 focusId={focus?.id}
                 onFocus={setFocusId}
               />
@@ -216,7 +209,7 @@ export function SignalDesk() {
               <span>
                 <span className="block text-sm font-medium">Hybrid</span>
                 <span className="block text-xs leading-5 text-muted">
-                  Only when EMA VWAP and Leo share a live side
+                  Only when EMA VWAP and Leo share a side
                 </span>
               </span>
             </label>
@@ -419,15 +412,14 @@ function ResultGroup({
 }
 
 function StateChip({ result }: { result: PairResult }) {
-  if (result.entryState === "live") {
+  if (result.action === "BUY" || result.action === "SELL") {
     return (
       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${actionClass(result.action)}`}>
         {result.action}
       </span>
     );
   }
-  const label = result.entryState === "passed" ? "Passed" : "Flat";
-  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${actionClass("HOLD")}`}>{label}</span>;
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${actionClass("HOLD")}`}>Flat</span>;
 }
 
 function Hero({
@@ -480,7 +472,7 @@ function Hero({
           {clock ? ` · ${clock}` : ""}
         </span>
       </p>
-      {result.entryState === "live" && (
+      {(result.action === "BUY" || result.action === "SELL") && (
         <p className="mt-2 text-sm text-muted">{positionNote(result)}</p>
       )}
 
@@ -498,7 +490,7 @@ function Hero({
 
       <p className="mt-4 text-sm leading-6">{result.note}</p>
 
-      {result.entryState === "live" && (
+      {(result.action === "BUY" || result.action === "SELL") && (
         <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-line sm:grid-cols-3">
           {levels.map(([label, value]) => (
             <div key={label} className="bg-surface px-3 py-2">
@@ -522,7 +514,8 @@ function Hero({
           <li key={vote.strategy} className="flex items-center justify-between gap-3 text-sm">
             <span className="text-muted">{vote.name}</span>
             <span className="font-medium">
-              {vote.entryState === "live" ? vote.action : vote.entryState === "passed" ? "Passed" : "Flat"}
+              {vote.action === "HOLD" ? "Flat" : vote.action}
+              {vote.action !== "HOLD" && vote.entryState === "passed" ? " · passed" : ""}
               <span className="font-normal text-muted"> · {vote.confidence}</span>
             </span>
           </li>
@@ -548,10 +541,11 @@ function StatusPill({
   action: Side;
   confidence: number;
 }) {
-  if (state === "live") {
+  if (action === "BUY" || action === "SELL") {
     return (
       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${actionClass(action)}`}>
-        {action} · {confidence}
+        {action}
+        {state === "passed" ? " · passed" : ""} · {confidence}
       </span>
     );
   }
@@ -564,6 +558,9 @@ function StatusPill({
 
 function positionNote(result: PairResult) {
   if (!result.entry) return "";
+  if (result.entryState === "passed") {
+    return "Price has already traded through this entry. Stop and targets stay on the card.";
+  }
   const beyond = (result.price - result.entry) * (result.action === "SELL" ? -1 : 1);
   const rel = Math.abs(result.price - result.entry) / result.entry;
   if (rel < 0.00008) return "Price is sitting on the entry.";

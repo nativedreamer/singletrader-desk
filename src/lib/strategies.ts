@@ -455,10 +455,10 @@ export function toVote(strategy: Vote["strategy"], name: string, run: StrategyRu
   };
 }
 
-/** A fill is live only while price has not traded through the entry, and no target is tagged. */
+/** Marks whether price is still at the entry. The open cross keeps its levels either way. */
 export function assessEntry(run: StrategyRun, livePrice: number): StrategyRun {
   if (run.action === "HOLD" || !run.entry) {
-    return { ...run, action: "HOLD", entryState: "flat", tpHit: 0, sl: 0, tp: [0, 0, 0, 0] };
+    return { ...run, entryState: "flat" };
   }
   const dir = run.action === "BUY" ? 1 : -1;
   const slip = Math.max(
@@ -466,49 +466,12 @@ export function assessEntry(run: StrategyRun, livePrice: number): StrategyRun {
     Math.abs(run.entry) * 0.00025,
   );
   const beyond = (livePrice - run.entry) * dir;
-  const side = run.action === "BUY" ? "Long" : "Short";
-  if (run.tpHit > 0 || beyond > slip) {
-    return {
-      ...run,
-      action: "HOLD",
-      entryState: "passed",
-      confidence: clamp(Math.round(run.confidence * 0.45), 12, 42),
-      sl: 0,
-      tp: [0, 0, 0, 0],
-      note:
-        run.tpHit > 0
-          ? `${side} already reached TP${run.tpHit}. That entry is behind the market.`
-          : `${side} entry is behind the market. Price has traded through it, so it is not a live fill.`,
-    };
-  }
-  const fresh = run.barsAgo <= 1;
-  return {
-    ...run,
-    entryState: "live",
-    note: fresh
-      ? `Live ${side.toLowerCase()}. Printed on the last closed bar, and price has not traded through it.`
-      : `Live ${side.toLowerCase()}. Price is back at the entry and has not traded through it.`,
-  };
+  const passed = run.tpHit > 0 || beyond > slip;
+  return { ...run, entryState: passed ? "passed" : "live" };
 }
 
 export function blendHybrid(emaRun: StrategyRun, leoRun: StrategyRun): StrategyRun {
-  if (emaRun.entryState === "passed" && leoRun.entryState === "passed") {
-    return {
-      ...emaRun,
-      action: "HOLD",
-      entryState: "passed",
-      confidence: clamp(Math.round((emaRun.confidence + leoRun.confidence) / 2), 12, 40),
-      sl: 0,
-      tp: [0, 0, 0, 0],
-      note: "Hybrid is on. Both entries have already been traded through.",
-      bias: "Flat",
-    };
-  }
-  const agree =
-    emaRun.entryState === "live" &&
-    leoRun.entryState === "live" &&
-    emaRun.action !== "HOLD" &&
-    emaRun.action === leoRun.action;
+  const agree = emaRun.action !== "HOLD" && emaRun.action === leoRun.action;
   if (!agree) {
     return {
       ...emaRun,
@@ -518,19 +481,23 @@ export function blendHybrid(emaRun: StrategyRun, leoRun: StrategyRun): StrategyR
       sl: 0,
       tp: [0, 0, 0, 0],
       tpHit: 0,
-      note: "Hybrid is on. There is no shared live entry.",
+      note: "Hybrid is on. EMA VWAP and Leo do not share a side.",
       bias: "Flat",
     };
   }
+  const passed = emaRun.entryState === "passed" || leoRun.entryState === "passed";
+  const side = emaRun.action === "BUY" ? "long" : "short";
   return {
     ...emaRun,
     action: emaRun.action,
-    entryState: "live",
+    entryState: passed ? "passed" : "live",
     confidence: clamp(Math.round((emaRun.confidence + leoRun.confidence) / 2 + 8), 60, 96),
     entry: emaRun.entry,
     sl: emaRun.sl,
     tp: emaRun.tp,
-    note: `Live hybrid ${emaRun.action === "BUY" ? "long" : "short"}. Both reads agree, and price has not traded through the entry.`,
+    note: passed
+      ? `Hybrid ${side}. Both reads agree. Price has already traded through the entry.`
+      : `Hybrid ${side}. Both reads agree, and price has not traded through the entry.`,
     bias: emaRun.bias,
     trendZone: emaRun.trendZone,
   };

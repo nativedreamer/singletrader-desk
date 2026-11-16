@@ -66,7 +66,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalyzeResult> {
         action: chosen.action,
         entryState: chosen.entryState,
         confidence: chosen.confidence,
-        entry: chosen.entryState === "live" ? chosen.entry : 0,
+        entry: chosen.entry,
         sl: chosen.sl,
         tp: chosen.tp,
         bias: chosen.bias,
