@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --color-bg: #f3f3f1;
+  --color-surface: #fbfbfa;
+  --color-fg: #17181c;
+  --color-muted: #6b6e76;
+  --color-line: #e4e4e1;
+  --color-fill: #ececea;
+  --color-accent: #243044;
+  --color-green: #1c7a43;
+  --color-red: #b42318;
+  --color-green-soft: #e6f4ec;
+  --color-red-soft: #fbeceb;
+  --color-accent-soft: #e7e9ed;
+  --shadow-panel: 0 1px 2px color-mix(in oklab, #17181c 6%, transparent);
+}
+
+@layer base {
+  html {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-bg);
+    color: var(--color-fg);
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary,
+  label {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
