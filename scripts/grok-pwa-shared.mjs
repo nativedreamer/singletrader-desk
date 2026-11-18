@@ -151,9 +151,9 @@ export function stripInstallParams(url) {
   return rest ? `${path}?${rest}` : path;
 }
 
-export function renderInstallPageHtml(template, { host, url } = {}) {
+export function renderInstallPageHtml(template, { host, url, site } = {}) {
   return String(template)
-    .replaceAll("{{APP_NAME}}", escapeHtml(displayAppName(host)))
+    .replaceAll("{{APP_NAME}}", escapeHtml(displayAppName(host, site)))
     .replaceAll("{{APP_URL}}", escapeHtml(stripInstallParams(url)));
 }
 
@@ -164,19 +164,20 @@ function productTitleFromSite() {
     const title = String(JSON.parse(raw).title ?? "").trim();
     if (title) return title;
   } catch {
-    /* fall through to the platform default */
+    /* Vercel functions cannot read src/lib/og/site.json; callers pass the bake. */
   }
   return "";
 }
 
-export function displayAppName(hostHeader) {
+export function displayAppName(hostHeader, site) {
   const fromHost = appNameFromHost(hostHeader);
   if (fromHost !== DEFAULT_APP_NAME) return fromHost;
-  return productTitleFromSite() || fromHost;
+  const baked = String(site?.title ?? "").trim();
+  return baked || productTitleFromSite() || fromHost;
 }
 
-export function renderWebManifest(hostHeader) {
-  const name = displayAppName(hostHeader);
+export function renderWebManifest(hostHeader, site) {
+  const name = displayAppName(hostHeader, site);
   return JSON.stringify(
     {
       name,
