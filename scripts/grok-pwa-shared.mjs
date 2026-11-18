@@ -153,12 +153,30 @@ export function stripInstallParams(url) {
 
 export function renderInstallPageHtml(template, { host, url } = {}) {
   return String(template)
-    .replaceAll("{{APP_NAME}}", escapeHtml(appNameFromHost(host)))
+    .replaceAll("{{APP_NAME}}", escapeHtml(displayAppName(host)))
     .replaceAll("{{APP_URL}}", escapeHtml(stripInstallParams(url)));
 }
 
+/** Site title when the host does not encode a published app name. */
+function productTitleFromSite() {
+  try {
+    const raw = readFileSync(join(process.cwd(), OG_SITE_REL_PATH), "utf8");
+    const title = String(JSON.parse(raw).title ?? "").trim();
+    if (title) return title;
+  } catch {
+    /* fall through to the platform default */
+  }
+  return "";
+}
+
+export function displayAppName(hostHeader) {
+  const fromHost = appNameFromHost(hostHeader);
+  if (fromHost !== DEFAULT_APP_NAME) return fromHost;
+  return productTitleFromSite() || fromHost;
+}
+
 export function renderWebManifest(hostHeader) {
-  const name = appNameFromHost(hostHeader);
+  const name = displayAppName(hostHeader);
   return JSON.stringify(
     {
       name,

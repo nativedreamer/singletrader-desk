@@ -8,13 +8,13 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: "SingleTrader" },
+      { title: "Confluence" },
       {
         name: "description",
-        content: "EMA VWAP and Leo signals for the forex and crypto pairs you choose.",
+        content: "Weighted confluence of twenty scripts across the forex, metal, and crypto pairs you choose.",
       },
       { name: "theme-color", content: "#f3f3f1" },
-      { name: "apple-mobile-web-app-title", content: "SingleTrader" },
+      { name: "apple-mobile-web-app-title", content: "Confluence" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

@@ -1,3 +1,18 @@
+export type GroupId = "direction" | "trigger" | "structure" | "higher" | "participation";
+
+export type ScriptRead = {
+  id: string;
+  name: string;
+  group: GroupId;
+  vote: -1 | 0 | 1;
+};
+
+export type GroupScore = {
+  id: GroupId;
+  label: string;
+  weight: number;
+  score: number;
+};
 export type Timeframe = "5m" | "15m" | "1h" | "4h";
 export type StrategyId = "ema_vwap" | "leo";
 export type Side = "BUY" | "SELL" | "HOLD";
@@ -54,7 +69,14 @@ export type PairResult = {
   bias: "Bullish" | "Bearish" | "Flat";
   trendZone: string;
   note: string;
-  votes: Vote[];
+  score: number;
+  stars: number;
+  starCap: number | null;
+  agree: number;
+  regime: number;
+  reversal: -1 | 0 | 1;
+  scripts: ScriptRead[];
+  groups: GroupScore[];
   indicators: {
     emaFast: number;
     emaSlow: number;
@@ -78,15 +100,11 @@ export type PairResult = {
 export type AnalyzeInput = {
   pairs: string[];
   timeframe: Timeframe;
-  strategy: StrategyId;
-  hybrid: boolean;
   twelveDataKey?: string;
 };
 
 export type AnalyzeResult = {
   generatedAt: string;
   timeframe: Timeframe;
-  strategy: StrategyId;
-  hybrid: boolean;
   results: PairResult[];
 };

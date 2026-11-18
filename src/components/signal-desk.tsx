@@ -1,21 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import * as Checkbox from "@radix-ui/react-checkbox";
-import * as Switch from "@radix-ui/react-switch";
 import { Check } from "lucide-react";
 import { analyzeMarkets } from "@/lib/analyze";
 import { formatPct, formatPx } from "@/lib/indicators";
-import type { AnalyzeResult, EntryState, PairResult, Side, StrategyId, Timeframe } from "@/lib/market-types";
+import type { AnalyzeResult, EntryState, PairResult, Side, Timeframe } from "@/lib/market-types";
 import { DEFAULT_PAIRS, MAX_PAIRS, PAIRS, PAIR_MAP, TIMEFRAMES } from "@/lib/pairs";
 import { MarketChart } from "@/components/market-chart";
 
-const STORAGE = "st.desk.v2";
+const STORAGE = "st.desk.v3";
 
 type Saved = {
   pairs: string[];
   timeframe: Timeframe;
-  strategy: StrategyId;
-  hybrid: boolean;
   twelveDataKey: string;
 };
 
@@ -39,8 +36,6 @@ export function SignalDesk() {
   const run = useServerFn(analyzeMarkets);
   const [pairs, setPairs] = useState<string[]>(DEFAULT_PAIRS);
   const [timeframe, setTimeframe] = useState<Timeframe>("15m");
-  const [strategy, setStrategy] = useState<StrategyId>("ema_vwap");
-  const [hybrid, setHybrid] = useState(false);
   const [twelveDataKey, setTwelveDataKey] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,17 +56,15 @@ export function SignalDesk() {
     if (saved?.timeframe && TIMEFRAMES.some((t) => t.id === saved.timeframe)) {
       setTimeframe(saved.timeframe);
     }
-    if (saved?.strategy === "leo" || saved?.strategy === "ema_vwap") setStrategy(saved.strategy);
-    if (typeof saved?.hybrid === "boolean") setHybrid(saved.hybrid);
     if (typeof saved?.twelveDataKey === "string") setTwelveDataKey(saved.twelveDataKey);
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    const payload: Saved = { pairs, timeframe, strategy, hybrid, twelveDataKey };
+    const payload: Saved = { pairs, timeframe, twelveDataKey };
     localStorage.setItem(STORAGE, JSON.stringify(payload));
-  }, [hydrated, pairs, timeframe, strategy, hybrid, twelveDataKey]);
+  }, [hydrated, pairs, timeframe, twelveDataKey]);
 
   const grouped = useMemo(
     () => [
@@ -103,7 +96,7 @@ export function SignalDesk() {
         return current.filter((item) => item !== id);
       }
       if (current.length >= MAX_PAIRS) {
-        setNotice(`Six pairs is the cap. Untick one before adding ${PAIR_MAP.get(id)?.label}.`);
+        setNotice(`${MAX_PAIRS} pairs is the cap. Untick one before adding ${PAIR_MAP.get(id)?.label}.`);
         return current;
       }
       return [...current, id];
@@ -116,7 +109,7 @@ export function SignalDesk() {
     setNotice(null);
     try {
       const next = await run({
-        data: { pairs, timeframe, strategy, hybrid, twelveDataKey },
+        data: { pairs, timeframe, twelveDataKey },
       });
       setReport(next);
       const firstTrade = next.results.find((r) => !r.error && r.action !== "HOLD");
@@ -132,18 +125,24 @@ export function SignalDesk() {
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-4 pt-8 pb-16 lg:px-8">
       <header className="mb-8 max-w-xl">
-        <p className="text-sm font-medium text-muted">Signals</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">SingleTrader</h1>
+        <div className="flex items-center gap-3">
+          <Wheel />
+          <div>
+            <p className="text-sm font-medium text-muted">Weighted read</p>
+            <h1 className="mt-0.5 text-3xl font-semibold tracking-tight">Confluence</h1>
+          </div>
+        </div>
         <p className="mt-3 text-sm leading-6 text-muted">
-          Open crosses stay on the desk with entry, stop, and targets, even after price has
-          traded through.
+          Twenty scripts vote in five weights: direction 30, trigger 25, structure 20, higher
+          timeframe 15, participation 10. Chop scales the score. A strong reversal can only cap
+          the stars.
         </p>
       </header>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section className="order-2 space-y-4 lg:order-1">
           {focus && !focus.error ? (
-            <Hero result={focus} when={report?.generatedAt} strategy={strategy} hybrid={hybrid} />
+            <Hero result={focus} when={report?.generatedAt} />
           ) : (
             <div className="rounded-3xl border border-line bg-surface px-5 py-8 shadow-panel">
               <p className="text-lg font-semibold tracking-tight">Waiting for a read</p>
@@ -187,32 +186,9 @@ export function SignalDesk() {
               options={TIMEFRAMES.map((item) => ({ id: item.id, label: item.label }))}
               onChange={setTimeframe}
             />
-
-            <h2 className="mt-4 px-1 text-sm font-medium text-muted">Strategy</h2>
-            <Segmented
-              value={strategy}
-              options={[
-                { id: "ema_vwap" as const, label: "EMA VWAP" },
-                { id: "leo" as const, label: "Leo 2:1" },
-              ]}
-              onChange={setStrategy}
-            />
-
-            <label className="mt-3 flex min-h-14 items-center gap-3 rounded-xl px-1">
-              <Switch.Root
-                checked={hybrid}
-                onCheckedChange={setHybrid}
-                className="relative flex h-7 w-12 shrink-0 items-center rounded-full bg-fill transition-colors data-[state=checked]:bg-fg"
-              >
-                <Switch.Thumb className="block h-5 w-5 translate-x-1 rounded-full bg-surface transition-transform data-[state=checked]:translate-x-6" />
-              </Switch.Root>
-              <span>
-                <span className="block text-sm font-medium">Hybrid</span>
-                <span className="block text-xs leading-5 text-muted">
-                  Only when EMA VWAP and Leo share a side
-                </span>
-              </span>
-            </label>
+            <p className="mt-3 px-1 text-xs leading-5 text-muted">
+              Direction, trigger, structure, higher timeframe, and participation are always on.
+            </p>
           </div>
 
           <div className="overflow-hidden rounded-3xl border border-line bg-surface shadow-panel">
@@ -222,34 +198,36 @@ export function SignalDesk() {
                 {pairs.length} of {MAX_PAIRS}
               </span>
             </div>
-            {grouped.map((group) => (
-              <div key={group.title}>
-                <p className="px-4 pt-2 pb-1 text-xs text-muted">{group.title}</p>
-                {group.items.map((pair) => {
-                  const on = pairs.includes(pair.id);
-                  return (
-                    <label
-                      key={pair.id}
-                      className="flex min-h-12 w-full items-center gap-3 px-4"
-                    >
-                      <Checkbox.Root
-                        checked={on}
-                        onCheckedChange={() => togglePair(pair.id)}
-                        className="grid h-5 w-5 shrink-0 place-items-center rounded-md border border-line bg-surface data-[state=checked]:border-fg data-[state=checked]:bg-fg data-[state=checked]:text-bg"
+            <div className="max-h-80 overflow-y-auto">
+              {grouped.map((group) => (
+                <div key={group.title}>
+                  <p className="px-4 pt-2 pb-1 text-xs text-muted">{group.title}</p>
+                  {group.items.map((pair) => {
+                    const on = pairs.includes(pair.id);
+                    return (
+                      <label
+                        key={pair.id}
+                        className="flex min-h-12 w-full items-center gap-3 px-4"
                       >
-                        <Checkbox.Indicator>
-                          <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                        </Checkbox.Indicator>
-                      </Checkbox.Root>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium">{pair.label}</span>
-                        <span className="block truncate text-xs text-muted">{pair.name}</span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            ))}
+                        <Checkbox.Root
+                          checked={on}
+                          onCheckedChange={() => togglePair(pair.id)}
+                          className="grid h-5 w-5 shrink-0 place-items-center rounded-md border border-line bg-surface data-[state=checked]:border-fg data-[state=checked]:bg-fg data-[state=checked]:text-bg"
+                        >
+                          <Checkbox.Indicator>
+                            <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                          </Checkbox.Indicator>
+                        </Checkbox.Root>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium">{pair.label}</span>
+                          <span className="block truncate text-xs text-muted">{pair.name}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
             <div className="flex gap-4 border-t border-line px-4 py-2">
               <button
                 type="button"
@@ -414,25 +392,20 @@ function ResultGroup({
 function StateChip({ result }: { result: PairResult }) {
   if (result.action === "BUY" || result.action === "SELL") {
     return (
-      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${actionClass(result.action)}`}>
-        {result.action}
+      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums ${actionClass(result.action)}`}>
+        {result.action} {result.score > 0 ? "+" : ""}
+        {result.score}
       </span>
     );
   }
-  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${actionClass("HOLD")}`}>Flat</span>;
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums ${actionClass("HOLD")}`}>
+      {result.score}
+    </span>
+  );
 }
 
-function Hero({
-  result,
-  when,
-  strategy,
-  hybrid,
-}: {
-  result: PairResult;
-  when?: string;
-  strategy: StrategyId;
-  hybrid: boolean;
-}) {
+function Hero({ result, when }: { result: PairResult; when?: string }) {
   const clock = when
     ? new Date(when).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : "";
@@ -444,15 +417,15 @@ function Hero({
     ["TP3", result.tp[2]],
     ["TP4", result.tp[3]],
   ] as const;
-  const leo = strategy === "leo" && !hybrid;
   const stats = [
     ["RSI 14", result.indicators.rsi, true],
     ["ATR 14", result.indicators.atr, false],
-    [leo ? "EMA 150" : "EMA 11", result.indicators.emaFast, false],
-    [leo ? "EMA 250" : "EMA 34", result.indicators.emaSlow, false],
+    ["EMA 11", result.indicators.emaFast, false],
+    ["EMA 34", result.indicators.emaSlow, false],
     ["Weekly VWAP", result.indicators.vwapWeekly, false],
     ["Monthly VWAP", result.indicators.vwapMonthly, false],
   ] as const;
+  const signed = result.score > 0 ? `+${result.score}` : String(result.score);
 
   return (
     <article className="rounded-3xl border border-line bg-surface px-5 py-5 shadow-panel">
@@ -461,9 +434,21 @@ function Hero({
           <p className="text-sm text-muted">{result.name}</p>
           <h2 className="text-2xl font-semibold tracking-tight">{result.label}</h2>
         </div>
-        <StatusPill state={result.entryState} action={result.action} confidence={result.confidence} />
+        <StatusPill state={result.entryState} action={result.action} score={result.score} />
       </div>
-      <p className="mt-3 text-4xl font-semibold tracking-tight tabular-nums">{formatPx(result.price)}</p>
+      <div className="mt-4 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-xs text-muted">Score</p>
+          <p className="text-4xl font-semibold tracking-tight tabular-nums">{signed}</p>
+        </div>
+        <div className="pb-1 text-right">
+          <Stars n={result.stars} />
+          <p className="mt-2 text-sm font-medium tabular-nums">
+            {result.agree} of {result.scripts.length || 20} agree
+          </p>
+        </div>
+      </div>
+      <p className="mt-3 text-3xl font-semibold tracking-tight tabular-nums">{formatPx(result.price)}</p>
       <p className={`mt-1 text-sm font-medium tabular-nums ${result.changePct >= 0 ? "text-green" : "text-red"}`}>
         {formatPct(result.changePct)}
         <span className="font-normal text-muted">
@@ -474,6 +459,29 @@ function Hero({
       </p>
       {(result.action === "BUY" || result.action === "SELL") && (
         <p className="mt-2 text-sm text-muted">{positionNote(result)}</p>
+      )}
+
+      <ul className="mt-4 space-y-3">
+        {result.groups.map((group) => (
+          <li key={group.id}>
+            <div className="mb-1 flex items-baseline justify-between text-sm">
+              <span>
+                {group.label}
+                <span className="text-muted"> · {group.weight}%</span>
+              </span>
+              <span className="font-medium tabular-nums">
+                {group.score > 0 ? "+" : ""}
+                {group.score}
+              </span>
+            </div>
+            <Meter score={group.score} />
+          </li>
+        ))}
+      </ul>
+      {result.starCap !== null && (
+        <p className="mt-3 text-xs leading-5 text-muted">
+          Strong Reversal opposes this side, so the rating stops at {result.starCap} stars. It never adds.
+        </p>
       )}
 
       <div className="mt-4">
@@ -504,54 +512,102 @@ function Hero({
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         {stats
           .filter(([, value]) => value !== 0)
-          .map(([label, value, rsi]) => (
-            <Stat key={label} label={label} value={rsi ? value.toFixed(1) : formatPx(value)} />
+          .map(([label, value, isRsi]) => (
+            <Stat key={label} label={label} value={isRsi ? value.toFixed(1) : formatPx(value)} />
           ))}
       </div>
 
-      <ul className="mt-4 space-y-2">
-        {result.votes.map((vote) => (
-          <li key={vote.strategy} className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-muted">{vote.name}</span>
-            <span className="font-medium">
-              {vote.action === "HOLD" ? "Flat" : vote.action}
-              {vote.action !== "HOLD" && vote.entryState === "passed" ? " · passed" : ""}
-              <span className="font-normal text-muted"> · {vote.confidence}</span>
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
+        {result.scripts.map((script) => (
+          <div key={script.id} className="flex items-center justify-between gap-2 text-sm">
+            <span className="truncate text-muted">{script.name}</span>
+            <span className={`font-medium ${script.vote > 0 ? "text-green" : script.vote < 0 ? "text-red" : ""}`}>
+              {script.vote > 0 ? "Long" : script.vote < 0 ? "Short" : "Flat"}
             </span>
-          </li>
+          </div>
         ))}
-      </ul>
-
-      {result.backtest.trades > 0 && (
-        <p className="mt-3 text-xs leading-5 text-muted">
-          Walk-forward on this window: {result.backtest.trades} closed trades,{" "}
-          {result.backtest.winRate}% reached TP1 before the stop, net {result.backtest.netR} R.
-        </p>
-      )}
+      </div>
     </article>
+  );
+}
+
+function Stars({ n }: { n: number }) {
+  return (
+    <span className="inline-flex gap-1" aria-label={`${n} of 5 stars`}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <span key={i} className={`h-2.5 w-2.5 rounded-full ${i < n ? "bg-fg" : "bg-fill"}`} />
+      ))}
+    </span>
+  );
+}
+
+function Meter({ score }: { score: number }) {
+  const width = Math.abs(score) / 2;
+  return (
+    <div className="relative h-1.5 overflow-hidden rounded-full bg-fill">
+      <span className="absolute top-0 bottom-0 left-1/2 w-px bg-line" />
+      <span
+        className={`absolute top-0 h-full ${score >= 0 ? "left-1/2 bg-green" : "bg-red"}`}
+        style={
+          score >= 0
+            ? { width: `${width}%` }
+            : { width: `${width}%`, left: `${50 - width}%` }
+        }
+      />
+    </div>
+  );
+}
+
+function Wheel() {
+  return (
+    <svg viewBox="0 0 32 32" className="h-11 w-11 shrink-0" aria-hidden>
+      <rect width="32" height="32" rx="8" className="fill-fg" />
+      <g className="stroke-bg" fill="none" strokeWidth="1.35" strokeLinecap="round">
+        <circle cx="16" cy="16" r="10.2" />
+        <circle cx="16" cy="16" r="3.15" />
+        {Array.from({ length: 8 }, (_, i) => {
+          const a = (Math.PI / 4) * i - Math.PI / 2;
+          const x1 = 16 + Math.cos(a) * 3.55;
+          const y1 = 16 + Math.sin(a) * 3.55;
+          const x2 = 16 + Math.cos(a) * 9.55;
+          const y2 = 16 + Math.sin(a) * 9.55;
+          const hx = 16 + Math.cos(a) * 11.55;
+          const hy = 16 + Math.sin(a) * 11.55;
+          const px = -Math.sin(a) * 2.15;
+          const py = Math.cos(a) * 2.15;
+          return (
+            <g key={i}>
+              <line x1={x1} y1={y1} x2={x2} y2={y2} />
+              <line x1={hx - px} y1={hy - py} x2={hx + px} y2={hy + py} />
+            </g>
+          );
+        })}
+      </g>
+    </svg>
   );
 }
 
 function StatusPill({
   state,
   action,
-  confidence,
+  score,
 }: {
   state: EntryState;
   action: Side;
-  confidence: number;
+  score: number;
 }) {
+  const signed = score > 0 ? `+${score}` : String(score);
   if (action === "BUY" || action === "SELL") {
     return (
-      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${actionClass(action)}`}>
+      <span className={`rounded-full px-3 py-1 text-xs font-semibold tabular-nums ${actionClass(action)}`}>
         {action}
-        {state === "passed" ? " · passed" : ""} · {confidence}
+        {state === "passed" ? " · passed" : ""} · {signed}
       </span>
     );
   }
   return (
-    <span className="rounded-full bg-fill px-3 py-1 text-xs font-semibold text-muted">
-      {state === "passed" ? "Passed" : "Flat"}
+    <span className="rounded-full bg-fill px-3 py-1 text-xs font-semibold text-muted tabular-nums">
+      Flat · {signed}
     </span>
   );
 }

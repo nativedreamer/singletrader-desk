@@ -1,8 +1,8 @@
 import type { AnalyzeInput, AnalyzeResult, PairResult } from "@/lib/market-types";
-import { barsPerDay, PAIR_MAP } from "@/lib/pairs";
+import { barsPerDay, MAX_PAIRS, PAIR_MAP } from "@/lib/pairs";
 import { anchoredVwap, roundPx } from "@/lib/indicators";
 import { loadCandles } from "@/lib/feeds.server";
-import { assessEntry, blendHybrid, runEmaVwap, runLeo, toVote } from "@/lib/strategies";
+import { scoreConfluence } from "@/lib/confluence";
 
 async function mapPool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
@@ -26,7 +26,7 @@ function changePct(closes: number[], tfBars: number) {
 }
 
 export async function runAnalysis(input: AnalyzeInput): Promise<AnalyzeResult> {
-  const unique = [...new Set(input.pairs)].filter((id) => PAIR_MAP.has(id)).slice(0, 6);
+  const unique = [...new Set(input.pairs)].filter((id) => PAIR_MAP.has(id)).slice(0, MAX_PAIRS);
   const results = await mapPool(unique, 3, async (id): Promise<PairResult> => {
     const pair = PAIR_MAP.get(id)!;
     const base = {
@@ -37,13 +37,7 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalyzeResult> {
     };
     try {
       const { candles, source, price } = await loadCandles(pair, input.timeframe, input.twelveDataKey);
-      const emaRun = assessEntry(runEmaVwap(candles), price);
-      const leoRun = assessEntry(runLeo(candles), price);
-      const chosen = input.hybrid
-        ? blendHybrid(emaRun, leoRun)
-        : input.strategy === "leo"
-          ? leoRun
-          : emaRun;
+      const read = scoreConfluence(candles, price, input.timeframe);
       const closes = candles.map((c) => c.close);
       const vwap = anchoredVwap(candles, "session");
       const window = candles.slice(-140);
@@ -63,18 +57,25 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalyzeResult> {
         price: live,
         changePct: changePct(closes, barsPerDay(input.timeframe)),
         source,
-        action: chosen.action,
-        entryState: chosen.entryState,
-        confidence: chosen.confidence,
-        entry: chosen.entry,
-        sl: chosen.sl,
-        tp: chosen.tp,
-        bias: chosen.bias,
-        trendZone: chosen.trendZone,
-        note: chosen.note,
-        votes: [toVote("ema_vwap", "EMA VWAP", emaRun), toVote("leo", "Leo 2:1", leoRun)],
-        indicators: emaRun.indicators,
-        backtest: chosen.backtest,
+        action: read.action,
+        entryState: read.entryState,
+        confidence: Math.abs(read.score),
+        entry: read.entry,
+        sl: read.sl,
+        tp: read.tp,
+        bias: read.bias,
+        trendZone: read.trendZone,
+        note: read.note,
+        score: read.score,
+        stars: read.stars,
+        starCap: read.starCap,
+        agree: read.agree,
+        regime: read.regime,
+        reversal: read.reversal,
+        scripts: read.scripts,
+        groups: read.groups,
+        indicators: read.indicators,
+        backtest: { trades: 0, wins: 0, winRate: 0, netR: 0 },
         series,
         error: null,
       };
@@ -93,7 +94,14 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalyzeResult> {
         bias: "Flat",
         trendZone: "",
         note: "",
-        votes: [],
+        score: 0,
+        stars: 0,
+        starCap: null,
+        agree: 0,
+        regime: 1,
+        reversal: 0,
+        scripts: [],
+        groups: [],
         indicators: {
           emaFast: 0,
           emaSlow: 0,
@@ -114,8 +122,6 @@ export async function runAnalysis(input: AnalyzeInput): Promise<AnalyzeResult> {
   return {
     generatedAt: new Date().toISOString(),
     timeframe: input.timeframe,
-    strategy: input.strategy,
-    hybrid: input.hybrid,
     results,
   };
 }
